@@ -9,12 +9,13 @@ DETAIL_SRC_DIR = detail
 TEST_SRC_DIR   = tests
 BUILD_DIR      = build
 OBJ_DIR        = $(BUILD_DIR)/obj
-ROOT_OBJ_DIR = $(OBJ_DIR)
+ROOT_OBJ_DIR   = $(OBJ_DIR)
 DETAIL_OBJ_DIR = $(OBJ_DIR)/detail
 TEST_OBJ_DIR   = $(OBJ_DIR)/tests
 
-# Output executable
-EXECUTABLE = $(BUILD_DIR)/run_tests
+# Output executables
+KEY_TEST_EXECUTABLE = $(BUILD_DIR)/key_tests
+TREE_TEST_EXECUTABLE = $(BUILD_DIR)/tree_tests
 
 # Source and Object Files
 DETAIL_SOURCES = $(wildcard $(DETAIL_SRC_DIR)/*.cpp)
@@ -23,19 +24,27 @@ DETAIL_OBJECTS = $(patsubst $(DETAIL_SRC_DIR)/%.cpp, $(DETAIL_OBJ_DIR)/%.o, $(DE
 ROOT_SOURCES = $(wildcard $(ROOT_SRC_DIR)/*.cpp)
 ROOT_OBJECTS = $(patsubst $(ROOT_SRC_DIR)/%.cpp, $(ROOT_OBJ_DIR)/%.o, $(ROOT_SOURCES))
 
-TEST_SOURCES = $(wildcard $(TEST_SRC_DIR)/*.cpp)
-TEST_OBJECTS = $(patsubst $(TEST_SRC_DIR)/%.cpp, $(TEST_OBJ_DIR)/%.o, $(TEST_SOURCES))
+KEY_TEST_SOURCE = $(TEST_SRC_DIR)/key_utils_tests.cpp
+KEY_TEST_OBJECT = $(TEST_OBJ_DIR)/key_utils_tests.o
+
+TREE_TEST_SOURCE = $(TEST_SRC_DIR)/tree_tests.cpp
+TREE_TEST_OBJECT = $(TEST_OBJ_DIR)/tree_tests.o
 
 # Dependencies
 DEPS = $(DETAIL_OBJECTS:.o=.d) $(TEST_OBJECTS:.o=.d)
 
 # All build target
-all: $(EXECUTABLE)
+all: $(KEY_TEST_EXECUTABLE) $(TREE_TEST_EXECUTABLE)
 
 # Link all object files into the final executable
-$(EXECUTABLE): $(DETAIL_OBJECTS) $(ROOT_OBJECTS) $(TEST_OBJECTS)
+$(KEY_TEST_EXECUTABLE): $(DETAIL_OBJECTS) $(ROOT_OBJECTS) $(KEY_TEST_OBJECT)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(DETAIL_OBJECTS) $(ROOT_OBJECTS) $(TEST_OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(KEY_TEST_OBJECT) $(DETAIL_OBJECTS) $(ROOT_OBJECTS) $(LDFLAGS) -o $@
+
+# Link tree test object file into a dedicated executable
+$(TREE_TEST_EXECUTABLE): $(TREE_TEST_OBJECT) $(DETAIL_OBJECTS) $(ROOT_OBJECTS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(TREE_TEST_OBJECT) $(DETAIL_OBJECTS) $(ROOT_OBJECTS) $(LDFLAGS) -o $@
 
 # Compile detail directory
 $(DETAIL_OBJ_DIR)/%.o: $(DETAIL_SRC_DIR)/%.cpp
@@ -47,8 +56,14 @@ $(ROOT_OBJ_DIR)/%.o: $(ROOT_SRC_DIR)/%.cpp
 	@mkdir -p $(ROOT_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Compile test directory
-$(TEST_OBJ_DIR)/%.o: $(TEST_SRC_DIR)/%.cpp
+
+# Compile the tree test file
+$(KEY_TEST_OBJECT): $(KEY_TEST_SOURCE)
+	@mkdir -p $(TEST_OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Compile the tree test file
+$(TREE_TEST_OBJECT): $(TREE_TEST_SOURCE)
 	@mkdir -p $(TEST_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

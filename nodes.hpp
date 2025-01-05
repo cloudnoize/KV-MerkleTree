@@ -72,7 +72,7 @@ class HashOfLeaf : public Node {
 class BranchNode : public Node {
    public:
     using ChildPos = std::optional<Byte>;
-    static constexpr std::optional<Byte> LeafChildPos = std::nullopt;
+    static constexpr ChildPos LeafChildPos = std::nullopt;
     static constexpr uint16_t kBranchingFactor = std::numeric_limits<uint8_t>::max();
     static const ByteSequence kNullNodeToHash;
     static unsigned char kNullNodeHash[SHA256_DIGEST_LENGTH];

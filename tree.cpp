@@ -58,8 +58,7 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                 branchNode->swapNodeAtChild(currentByte, newLeaf);
                 return;
             } else if (nodeType == Node::Type::HashOfLeaf) {
-                // check if it's an update i.e. leaf key equals to the inserted key.
-                // increment by the current byte.
+                // We have a leaf on the path, need to compare its extension to deduce the action.
                 extension.incrementPositionBy(1);
                 auto [result, matchBytes] =
                     extension.compareTo(branchNode->getChildAt(currentByte)->extension());
@@ -68,11 +67,13 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                     branchNode->updateHashOfLeafChild(currentByte, key, value);
                     return;
                 }
+                // the new inserted key and the existing leaf, shares a common path i.e. we need to
+                // insert a new branch node.
                 // the key in the db to the new branch node
                 auto newBranchNodeKey = extension.getKeySoFar();
-                auto newBranchNode = BranchNode::createBranchNode();
                 // the common extension is the extension of the new branch node.
                 auto newExtension = extension.getExtentionFromCurrentPositionUntil(matchBytes);
+                auto newBranchNode = BranchNode::createBranchNode();
                 newBranchNode->setExtension(ByteSequence{newExtension.begin(), newExtension.end()});
                 // this will create the dirty hashof branch for this node, and will swap with the
                 // hashofleaf
@@ -81,45 +82,31 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                 branchNode->swapNodeAtChild(currentByte, nodeToSwap);
 
                 // At this point the branchnode is updated to point to the new branchnode, now we
-                // need to set the new branchnode to contains the old leaf and the new leaf.
-                auto hashOfLeafExtension = nodeToSwap->extension();
-                auto extensionView = ExtensionView{hashOfLeafExtension};
-                extensionView.incrementPositionBy(matchBytes);
-                auto optByteToSetHashOfLeaf = extensionView.getCurrentByte();
-                extensionView.incrementPositionBy(1);
+                // need to set the new branchnode to contain the old leaf and the new leaf.
+
+                // Truncate the common extension from the old  leaf and update
+                auto updatedExtension = ExtensionView{nodeToSwap->extension()};
+                updatedExtension.incrementPositionBy(matchBytes);
+                auto optByteToSetHashOfLeaf = updatedExtension.getCurrentByte();
+                updatedExtension.incrementPositionBy(1);
                 nodeToSwap->setExtension(
-                    ByteSequence{extensionView.getExtentionFromCurrentPosition().begin(),
-                                 extensionView.getExtentionFromCurrentPosition().end()});
-                if (!optByteToSetHashOfLeaf.has_value()) {
-                    // The existing hashOfLeaf is on the path of the new key
-                    assert(result == ExtensionView::CompareResultType::contains_other_extension);
-                    assert(extensionView.size() == matchBytes);
-                    // after this nodeToSwap == nullptr
-                    newBranchNode->swapNodeAtChild(BranchNode::LeafChildPos, nodeToSwap);
-                    assert(nodeToSwap == nullptr);
-                } else {
-                    newBranchNode->swapNodeAtChild(*optByteToSetHashOfLeaf, nodeToSwap);
-                }
+                    ByteSequence{updatedExtension.getExtentionFromCurrentPosition().begin(),
+                                 updatedExtension.getExtentionFromCurrentPosition().end()});
+                // nodeToSwap in null after the swap!
+                newBranchNode->swapNodeAtChild(optByteToSetHashOfLeaf, nodeToSwap);
+
+                // New leaf preparation
                 // get to the next byte after the common extension
                 extension.incrementPositionBy(matchBytes);
                 auto optNewLeafCurrentByte = extension.getCurrentByte();
                 // if current byte is nullopt it means that its path terminates at this node
-                if (!optNewLeafCurrentByte.has_value()) {
-                    assert(result == ExtensionView::CompareResultType::substring);
-                    // assert(newBranchNode->getTypeOfChild(BranchNode::ChildPos) ==
-                    //        Node::Type::NullNode);
-                    newBranchNode->setLeaf(key, value);
-                    // assert(newBranchNode->getTypeOfChild(BranchNode::ChildPos) ==
-                    //    Node::Type::HashOfLeaf);
-                } else {
-                    assert(result == ExtensionView::CompareResultType::diverge);
-                    extension.incrementPositionBy(1);
-                    auto hashofleaf = HashOfLeaf::createhashOfLeaf(
-                        key, value,
-                        ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
-                                     extension.getExtentionFromCurrentPosition().end()});
-                    newBranchNode->swapNodeAtChild(optNewLeafCurrentByte, hashofleaf);
-                }
+                extension.incrementPositionBy(1);
+                auto hashofleaf = HashOfLeaf::createhashOfLeaf(
+                    key, value,
+                    ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
+                                 extension.getExtentionFromCurrentPosition().end()});
+                newBranchNode->swapNodeAtChild(optNewLeafCurrentByte, hashofleaf);
+
                 db_.emplace(ByteSequence{newBranchNodeKey.begin(), newBranchNodeKey.end()},
                             newBranchNode.release());
             } else if (nodeType == Node::Type::HashOfBranch) {

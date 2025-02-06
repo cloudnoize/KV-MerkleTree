@@ -3,6 +3,8 @@
 #include "../detail/key_utils.hpp"
 #include "../nodes.hpp"
 
+using namespace merkle;
+
 merkle::ByteSequence convertByteSequenceView(const merkle::ByteSequenceView& view) {
     return merkle::ByteSequence{view.begin(), view.end()};
 }
@@ -205,6 +207,32 @@ TEST(Extension, get_extensiom_until) {
             ASSERT_EQ(extUntil, extStrUntil);
         }
         ext.incrementPositionBy(1);
+    }
+}
+
+TEST(ByteSequence, less_than) {
+    {
+        ByteSequence key{'a', 'b', 'd', 'f', 'd', 'm'};
+        ByteSequence key2{'a', 'b', 'd', 'f', 'd'};
+        auto key2View = ByteSequenceToView(key2);
+        auto res = CompareBytes{}(key2View, key);
+        ASSERT_TRUE(res);
+    }
+
+    {
+        ByteSequence key{'a', 'b', 'd', 'f', 'd', 'm'};
+        ByteSequence key2{'a', 'b', 'd', 'f', 'd', 'z'};
+        auto key2View = ByteSequenceToView(key2);
+        auto res = CompareBytes{}(key2View, key);
+        ASSERT_FALSE(res);
+    }
+
+    {
+        ByteSequence key{'a', 'b', 'd', 'f', 'd'};
+        ByteSequence key2{'a', 'b', 'd', 'f', 'd'};
+        auto key2View = ByteSequenceToView(key2);
+        auto res = CompareBytes{}(key2View, key);
+        ASSERT_FALSE(res);
     }
 }
 

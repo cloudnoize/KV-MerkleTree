@@ -21,6 +21,13 @@ class Node {
 
     ByteSequenceView extension() const { return ByteSequenceToView(extension_); }
     void setExtension(ByteSequence&& extension) { extension_ = std::move(extension); }
+    void truncateExtension(size_t count) {
+        auto oldExtension = extension();
+        auto oldExtensionView = ExtensionView(oldExtension);
+        oldExtensionView.incrementPositionBy(count);
+        auto updatedExtensionView = oldExtensionView.getExtentionFromCurrentPosition();
+        setExtension(ByteSequence{updatedExtensionView.begin(), updatedExtensionView.end()});
+    }
 
     virtual Type getType() const = 0;
 
@@ -101,6 +108,13 @@ class BranchNode : public Node {
         }
         return children_[*optChild];
     }
+
+    void setDirty(ChildPos optChild) {
+        auto type = getTypeOfChild(optChild);
+        assert(type == Node::Type::HashOfBranch);
+        static_cast<merkle::HashOfBranch*>(children_[*optChild].get())->setDirty(true);
+    }
+
     void swapNodeAtChild(std::optional<Byte> optChild, std::unique_ptr<Node>& other) {
         if (optChild == LeafChildPos) {
             swapLeaf(other);

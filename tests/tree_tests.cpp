@@ -3,6 +3,11 @@
 #include "../tree.hpp"
 
 using namespace merkle;
+
+std::string hashToString(const unsigned char* hash) {
+    return std::string(reinterpret_cast<const char*>(hash), SHA256_DIGEST_LENGTH);
+}
+
 TEST(Tree, empty) {
     Tree tree;
     ByteSequence bs{'a'};
@@ -202,6 +207,10 @@ TEST(Tree, new_leaf_is_substring_of_existing_leaf) {
         auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
                                      expectedExtension.end());
         ASSERT_TRUE(eq);
+
+        // Compare expected hash
+        auto hashOfLeaf = HashOfLeaf{{'b', 'd', 'f', 'd', 'm'}, {'a'}};
+        ASSERT_EQ(hashToString(node->hash()), hashToString(hashOfLeaf.hash()));
     }
     // insert new leaf on the path of prev leaf, should create a new branch node
     {
@@ -231,10 +240,16 @@ TEST(Tree, new_leaf_is_substring_of_existing_leaf) {
         auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
                                      expectedExtension.end());
         ASSERT_TRUE(eq);
+
         const auto& leafOfBranch = branchNode->getChildAt(BranchNode::LeafChildPos);
         ASSERT_EQ(leafOfBranch->getType(), Node::Type::HashOfLeaf);
         auto leafOfBranchExt = leafOfBranch->extension();
         ASSERT_EQ(leafOfBranchExt.size(), 0);
+        // Compare expected hash
+        {
+            auto hashOfLeaf = HashOfLeaf{{'b', 'd', 'f'}, {'a', 'a'}};
+            ASSERT_EQ(hashToString(leafOfBranch->hash()), hashToString(hashOfLeaf.hash()));
+        }
 
         const auto& leafAtD = branchNode->getChildAt('d');
         ASSERT_EQ(leafAtD->getType(), Node::Type::HashOfLeaf);
@@ -242,7 +257,98 @@ TEST(Tree, new_leaf_is_substring_of_existing_leaf) {
         auto expectedExtensionD = ByteSequence{'m'};
         auto eqD = std::ranges::equal(leafAtDExt.begin(), leafAtDExt.end(),
                                       expectedExtensionD.begin(), expectedExtensionD.end());
+
+        {
+            auto hashOfLeaf = HashOfLeaf{{'b', 'd', 'f', 'd', 'm'}, {'a'}};
+            ASSERT_EQ(hashToString(leafAtD->hash()), hashToString(hashOfLeaf.hash()));
+        }
         ASSERT_TRUE(eqD);
+    }
+}
+
+TEST(Tree, continue_on_branch_node) {
+    Tree tree;
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'm'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    // insert new leaf on the path of prev leaf, should create a new branch node
+    {
+        ByteSequence key{'b', 'd', 'f'};
+        ByteSequence value{'a', 'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        auto& node = branchNode->getChildAt(BranchNode::LeafChildPos);
+        ASSERT_EQ(node->getType(), merkle::Node::HashOfLeaf);
+        auto& node2 = branchNode->getChildAt('k');
+        ASSERT_EQ(node2->getType(), merkle::Node::HashOfLeaf);
+    }
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 't', 't'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b', 'd', 'f', 'k'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        ASSERT_EQ(branchNode->getType(), merkle::Node::BranchNode);
+    }
+}
+
+TEST(Tree, new_key_is_substring) {
+    Tree tree;
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l', 'm'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    // insert new leaf on the path of prev leaf, should create a new branch node
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l'};
+        ByteSequence value{'a', 'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        auto& node = branchNode->getChildAt(BranchNode::LeafChildPos);
+        ASSERT_EQ(node->getType(), merkle::Node::HashOfLeaf);
+        auto& node2 = branchNode->getChildAt('m');
+        ASSERT_EQ(node2->getType(), merkle::Node::HashOfLeaf);
+    }
+    {
+        ByteSequence key{'b', 'd'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        ASSERT_EQ(branchNode->getType(), merkle::Node::BranchNode);
+        auto ext = branchNode->extension();
+        auto expectedExtension = ByteSequence{'d'};
+        auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                     expectedExtension.end());
+        ASSERT_TRUE(eq);
+    }
+    {
+        ByteSequence key{'b', 'd', 'f'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        ASSERT_EQ(branchNode->getType(), merkle::Node::BranchNode);
+        auto ext = branchNode->extension();
+        auto expectedExtension = ByteSequence{'k', 'l'};
+        auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                     expectedExtension.end());
+        ASSERT_TRUE(eq);
     }
 }
 

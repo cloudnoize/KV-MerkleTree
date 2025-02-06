@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <optional>
 #include <span>
 #include <string>
@@ -17,6 +18,19 @@ using ByteSequenceView = std::span<const Byte>;
 inline ByteSequenceView ByteSequenceToView(const ByteSequence& bs) {
     return ByteSequenceView{bs.begin(), bs.end()};
 }
+
+struct CompareBytes {
+    using is_transparent = void;  // Enables heterogeneous lookup
+    template <typename T, typename U>
+    bool operator()(const T& lhs, const U& rhs) const {
+        for (size_t i = 0; i < lhs.size() && i < rhs.size(); ++i) {
+            if (lhs[i] != rhs[i]) {
+                return lhs[i] < rhs[i];
+            }
+        }
+        return lhs.size() < rhs.size();
+    }
+};
 
 class ExtensionView {
    public:

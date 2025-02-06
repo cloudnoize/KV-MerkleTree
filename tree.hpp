@@ -1,4 +1,4 @@
-#include <unordered_map>
+#include <map>
 
 #include "nodes.hpp"
 
@@ -12,18 +12,27 @@ class Tree {
 
     void insert(ByteSequence&& key, ByteSequence&& value);
 
-    const std::unique_ptr<BranchNode>& getBranchNode(const ByteSequence& bs) const {
+    template <typename SPAN>
+    const std::unique_ptr<BranchNode>& getBranchNode(const SPAN& span) const {
         static const std::unique_ptr<BranchNode> kNotFound;
-        if (db_.count(bs) == 0) {
+        auto itr = db_.find(span);
+        if (itr == db_.end()) {
             return kNotFound;
         }
-        return db_.at(bs);
+        return itr->second;
     }
 
     const std::unique_ptr<BranchNode>& getRootNode() const { return root_; }
 
    private:
+    template <typename SPAN>
+    std::unique_ptr<BranchNode>& getMutableBranchNode(const SPAN& span) {
+        auto itr = db_.find(span);
+        assert(itr != db_.end());
+        return itr->second;
+    }
+
     std::unique_ptr<BranchNode> root_;
-    std::unordered_map<ByteSequence, std::unique_ptr<BranchNode> > db_;
+    std::map<ByteSequence, std::unique_ptr<BranchNode>, CompareBytes> db_;
 };
 };  // namespace merkle

@@ -80,6 +80,7 @@ class BranchNode : public Node {
    public:
     using ChildPos = std::optional<Byte>;
     static constexpr ChildPos LeafChildPos = std::nullopt;
+    using ChildAndPos = std::pair<std::reference_wrapper<std::unique_ptr<Node>>, ChildPos>;
     static constexpr uint16_t kBranchingFactor = std::numeric_limits<uint8_t>::max();
     static const ByteSequence kNullNodeToHash;
     static unsigned char kNullNodeHash[SHA256_DIGEST_LENGTH];
@@ -129,7 +130,17 @@ class BranchNode : public Node {
     BranchNode(const BranchNode&) = delete;
     BranchNode& operator=(const BranchNode&) = delete;
 
+    static std::unique_ptr<BranchNode> createBranchNode(ByteSequence&& extension,
+                                                        std::vector<ChildAndPos>& cnps) {
+        auto node = std::make_unique<BranchNode>();
+        node->setExtension(std::move(extension));
+        for (auto& cnp : cnps) {
+            node->swapNodeAtChild(cnp.second, cnp.first.get());
+        }
+        return node;
+    }
     static std::unique_ptr<BranchNode> createBranchNode() { return std::make_unique<BranchNode>(); }
+
     std::unique_ptr<Node> createHashOfBranchForThisNode() {
         auto hashOfBranch = std::make_unique<merkle::HashOfBranch>();
         hashOfBranch->setDirty(true);

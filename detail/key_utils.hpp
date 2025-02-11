@@ -71,6 +71,13 @@ class ExtensionView {
         return ByteSequenceView{extension.begin() + position, itrUntil};
     }
 
+    ByteSequenceView getExtentionRange(size_t start, size_t until) const {
+        auto itrStart = start > extension.size() ? extension.end() : extension.begin() + start;
+
+        auto itrUntil = until > extension.size() ? extension.end() : extension.begin() + until;
+        return ByteSequenceView{itrStart, itrUntil};
+    }
+
     std::optional<Byte> getCurrentByte() const {
         if (position >= extension.size()) {
             return std::nullopt;

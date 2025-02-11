@@ -1,7 +1,6 @@
 #include "tree.hpp"
 
 namespace merkle {
-
 void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
     auto* branchNode = root_.get();
     ExtensionView extension{key};
@@ -39,29 +38,14 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                 // the key in the db to the new branch node
                 auto newBranchNodeKey = extension.getKeySoFar();
                 // the common extension is the extension of the new branch node.
-                auto newExtension = extension.getExtentionFromCurrentPositionUntil(matchBytes);
-                auto newBranchNode = BranchNode::createBranchNode();
-                newBranchNode->setExtension(ByteSequence{newExtension.begin(), newExtension.end()});
-                // this will create the dirty hashof branch for this node, and will swap with the
-                // hashofleaf
-                auto nodeToSwap = newBranchNode->createHashOfBranchForThisNode();
-                // After the swap, the node to swap holds the hash of leaf.
-                branchNode->swapNodeAtChild(currentByte, nodeToSwap);
-
-                // At this point the branchnode is updated to point to the new branchnode, now we
-                // need to set the new branchnode to contain the old leaf and the new leaf.
-
-                // Truncate the common extension from the old leaf and update
-                nodeToSwap->truncateExtension(matchBytes);
-                auto byteToSetHashOfLeaf = ExtensionView{nodeToSwap->extension()}.getCurrentByte();
-                // if extension is not empty, the leaf node will be places at a child therefore need
-                // to truncate the byte of that child from the extension
-                if (byteToSetHashOfLeaf.has_value()) {
-                    nodeToSwap->truncateExtension(1);
-                }
-                // nodeToSwap in null after the swap!
-                newBranchNode->swapNodeAtChild(byteToSetHashOfLeaf, nodeToSwap);
-
+                auto newExtensionView = extension.getExtentionFromCurrentPositionUntil(matchBytes);
+                std::unique_ptr<Node> nodeToMove;
+                branchNode->swapNodeAtChild(currentByte, nodeToMove);
+                nodeToMove->truncateExtension(matchBytes);
+                auto byteToSetHashOfLeaf = ExtensionView{nodeToMove->extension()}.getCurrentByte();
+                nodeToMove->truncateExtension(1);
+                std::vector<BranchNode::ChildAndPos> cnps;
+                cnps.emplace_back(std::make_pair(std::ref(nodeToMove), byteToSetHashOfLeaf));
                 // New leaf preparation
                 // get to the next byte after the common extension
                 extension.incrementPositionBy(matchBytes);
@@ -72,14 +56,24 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                     key, value,
                     ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
                                  extension.getExtentionFromCurrentPosition().end()});
-                newBranchNode->swapNodeAtChild(optNewLeafCurrentByte, hashofleaf);
+                cnps.emplace_back(std::make_pair(std::ref(hashofleaf), optNewLeafCurrentByte));
+
+                auto newBranchNode = BranchNode::createBranchNode(
+                    ByteSequence{newExtensionView.begin(), newExtensionView.end()}, cnps);
+                // this will create the dirty hashof branch for this node, and will swap with the
+                // hashofleaf
+                auto nodeToSwap = newBranchNode->createHashOfBranchForThisNode();
+                branchNode->swapNodeAtChild(currentByte, nodeToSwap);
 
                 db_.emplace(ByteSequence{newBranchNodeKey.begin(), newBranchNodeKey.end()},
                             newBranchNode.release());
                 return;
             } else if (nodeType == Node::Type::HashOfBranch) {
-                // TODO next child is branch node, this should be hash., set as dirty, load next
-                // node and continue;
+                // TODO This is the only place we go to the next iteration. we need to stack the prv
+                // node as we might need to change its hashOfBranch. can we do optimization to skip
+                // reading the next node if the extension of the hashofbranch shows that we can skip
+                // it? it can contradict the fact that we may need to change the hashof branch
+                // extension. so we need hashofbranch exntesion?
                 auto nextbranchDbKey = extension.getKeySoFar();
                 branchNode->setDirty(currentByte);
                 branchNode = getMutableBranchNode(nextbranchDbKey).get();
@@ -88,22 +82,30 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
                 // TODO , we should not reach here, assert;
             }
         } else if (result == ExtensionView::CompareResultType::substring) {
-            // Insert a new branch on the path which shares a substring of the current path and
-            // point to the current branch node which its extension is truncated.
+            // Prepare the new branch node with a leaf child and a hashofbranch to the current
+            // branch node
             auto currentBranchDbKey = extension.getKeySoFar();
-            auto newBranchNode = BranchNode::createBranchNode();
-            auto newExtensionView = extension.getExtentionFromCurrentPosition();
-            newBranchNode->setExtension(
-                ByteSequence{newExtensionView.begin(), newExtensionView.end()});
-            newBranchNode->setLeaf(key, value);
-
+            auto newExtensionView = extension.getExtentionFromCurrentPositionUntil(matchBytes);
+            extension.incrementPositionBy(matchBytes);
+            auto leafPos = extension.getCurrentByte();
+            assert(leafPos == std::nullopt);
+            extension.incrementPositionBy(1);
+            auto hashofleaf = HashOfLeaf::createhashOfLeaf(
+                key, value,
+                ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
+                             extension.getExtentionFromCurrentPosition().end()});
+            std::vector<BranchNode::ChildAndPos> cnps;
+            cnps.emplace_back(std::make_pair(std::ref(hashofleaf), leafPos));
             // truncate the extension of the older branchnode
             branchNode->truncateExtension(matchBytes);
             Byte nextByte = branchNode->extension()[0];
             branchNode->truncateExtension(1);
             // set the hashofBranch to point to the old branchnode
             auto hashOfBranch = branchNode->createHashOfBranchForThisNode();
-            newBranchNode->swapNodeAtChild(nextByte, hashOfBranch);
+            cnps.emplace_back(std::make_pair(std::ref(hashOfBranch), nextByte));
+            auto newBranchNode = BranchNode::createBranchNode(
+                ByteSequence{newExtensionView.begin(), newExtensionView.end()}, cnps);
+
             // At this phase the new branch node is ready with the leaf and pointing to the old
             // branch node, need to set it in the db with the key of the old branchnode
             auto& mutableBranchNode = getMutableBranchNode(currentBranchDbKey);
@@ -116,24 +118,25 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
         } else if (result == ExtensionView::CompareResultType::diverge) {
             // TODO new branch node with the common extension, insert hash of leaf with extension
             // for the new key/value,
+            auto newBranchDbKey =
+                extension.getExtentionRange(0, extension.getPosition() + matchBytes);
+
             auto currentBranchDbKey = extension.getKeySoFar();
-            auto newBranchNode = BranchNode::createBranchNode();
             auto commonExtensionView = extension.getExtentionFromCurrentPositionUntil(matchBytes);
-            newBranchNode->setExtension(
-                ByteSequence{commonExtensionView.begin(), commonExtensionView.end()});
+            // As this branchnode is inserted in the middle of the prv branch node and the current,
+            // we need to set the prv branchnode hashof branch
+
             extension.incrementPositionBy(matchBytes);
-            auto newBranchDbKey = extension.getKeySoFar();
+
             auto optCurrentByte = extension.getCurrentByte();
-            assert(optCurrentByte.has_value());
-            auto currentByte = *optCurrentByte;
             extension.incrementPositionBy(1);
-            {
-                auto hashofleaf = HashOfLeaf::createhashOfLeaf(
-                    key, value,
-                    ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
-                                 extension.getExtentionFromCurrentPosition().end()});
-                newBranchNode->swapNodeAtChild(currentByte, hashofleaf);
-            }
+
+            auto hashofleaf = HashOfLeaf::createhashOfLeaf(
+                key, value,
+                ByteSequence{extension.getExtentionFromCurrentPosition().begin(),
+                             extension.getExtentionFromCurrentPosition().end()});
+            std::vector<BranchNode::ChildAndPos> cnps;
+            cnps.emplace_back(std::make_pair(std::ref(hashofleaf), optCurrentByte));
 
             // truncate the extension of the older branchnode
             branchNode->truncateExtension(matchBytes);
@@ -142,7 +145,10 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
 
             // set the hashofBranch to point to the old branchnode
             auto hashOfBranch = branchNode->createHashOfBranchForThisNode();
-            newBranchNode->swapNodeAtChild(nextByte, hashOfBranch);
+            cnps.emplace_back(std::make_pair(std::ref(hashOfBranch), nextByte));
+
+            auto newBranchNode = BranchNode::createBranchNode(
+                ByteSequence{commonExtensionView.begin(), commonExtensionView.end()}, cnps);
 
             // At this phase the new branch node is ready with the leaf and pointing to the old
             // branch node, need to set it in the db with the key of the old branchnode

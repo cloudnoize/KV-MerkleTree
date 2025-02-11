@@ -352,6 +352,80 @@ TEST(Tree, new_key_is_substring) {
     }
 }
 
+TEST(Tree, new_key_diverges) {
+    Tree tree;
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l', 'm'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    // insert new leaf on the path of prev leaf, should create a new branch node
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l'};
+        ByteSequence value{'a', 'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        auto& node = branchNode->getChildAt(BranchNode::LeafChildPos);
+        ASSERT_EQ(node->getType(), merkle::Node::HashOfLeaf);
+        auto& node2 = branchNode->getChildAt('m');
+        ASSERT_EQ(node2->getType(), merkle::Node::HashOfLeaf);
+        auto ext = branchNode->extension();
+        auto expectedExtension = ByteSequence{'d', 'f', 'k', 'l'};
+        auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                     expectedExtension.end());
+        ASSERT_TRUE(eq);
+    }
+    // diverge
+    {
+        ByteSequence key{'b', 'd', 'f', 'g', 'q'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    {
+        ByteSequence key{'b'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        ASSERT_EQ(branchNode->getType(), merkle::Node::BranchNode);
+        auto ext = branchNode->extension();
+        auto expectedExtension = ByteSequence{'d', 'f'};
+        auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                     expectedExtension.end());
+        ASSERT_TRUE(eq);
+        {
+            auto& node = branchNode->getChildAt('k');
+            ASSERT_EQ(node->getType(), merkle::Node::HashOfBranch);
+        }
+        {
+            auto& node = branchNode->getChildAt('g');
+            ASSERT_EQ(node->getType(), merkle::Node::HashOfLeaf);
+            auto ext = node->extension();
+            auto expectedExtension = ByteSequence{'q'};
+            auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                         expectedExtension.end());
+            ASSERT_TRUE(eq);
+        }
+    }
+    {
+        ByteSequence key{'b', 'd', 'f', 'k'};
+        auto& branchNode = tree.getBranchNode(key);
+        ASSERT_NE(branchNode, nullptr);
+        ASSERT_EQ(branchNode->getType(), merkle::Node::BranchNode);
+        auto ext = branchNode->extension();
+        auto expectedExtension = ByteSequence{'l'};
+        auto eq = std::ranges::equal(ext.begin(), ext.end(), expectedExtension.begin(),
+                                     expectedExtension.end());
+        ASSERT_TRUE(eq);
+        auto& node = branchNode->getChildAt(BranchNode::LeafChildPos);
+        ASSERT_EQ(node->getType(), merkle::Node::HashOfLeaf);
+        auto& node2 = branchNode->getChildAt('m');
+        ASSERT_EQ(node2->getType(), merkle::Node::HashOfLeaf);
+    }
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

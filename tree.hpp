@@ -24,6 +24,8 @@ class Tree {
 
     const std::unique_ptr<BranchNode>& getRootNode() const { return root_; }
 
+    void calculateHash();
+
    private:
     template <typename SPAN>
     std::unique_ptr<BranchNode>& getMutableBranchNode(const SPAN& span) {

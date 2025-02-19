@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -30,6 +31,8 @@ class Node {
     }
 
     virtual Type getType() const = 0;
+
+    // TODO add ser/der
 
     virtual ~Node() noexcept {};
     Node(){};
@@ -110,10 +113,17 @@ class BranchNode : public Node {
         return children_[*optChild];
     }
 
-    void setDirty(ChildPos optChild) {
+    void setDirty(ChildPos optChild, bool dirty) {
         auto type = getTypeOfChild(optChild);
         assert(type == Node::Type::HashOfBranch);
-        static_cast<merkle::HashOfBranch*>(children_[*optChild].get())->setDirty(true);
+        static_cast<merkle::HashOfBranch*>(children_[*optChild].get())->setDirty(dirty);
+    }
+
+    void updateHashOfBranchHash(ChildPos optChild, const unsigned char* hash) {
+        auto type = getTypeOfChild(optChild);
+        assert(type == Node::Type::HashOfBranch);
+        auto* node = children_[*optChild].get();
+        std::memcpy(node->getMutableHash(), hash, SHA256_DIGEST_LENGTH);
     }
 
     void swapNodeAtChild(std::optional<Byte> optChild, std::unique_ptr<Node>& other) {

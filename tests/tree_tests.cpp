@@ -426,6 +426,36 @@ TEST(Tree, new_key_diverges) {
     }
 }
 
+TEST(Tree, hash_of_branch_hashes) {
+    Tree tree;
+    unsigned char emptyHash[SHA256_DIGEST_LENGTH] = {};
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l', 'm'};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    // insert new leaf on the path of prev leaf, should create a new branch node
+    {
+        ByteSequence key{'b', 'd', 'f', 'k', 'l'};
+        ByteSequence value{'a', 'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    const auto& root = tree.getRootNode();
+    Byte b = 'b';
+    auto& bHob = root->getChildAt(b);
+    ASSERT_EQ(bHob->getType(), merkle::Node::HashOfBranch);
+    ByteSequence key{b};
+    auto& bBranchNode = tree.getBranchNode(key);
+    ASSERT_TRUE(compareHashes(root->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(bHob->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(bBranchNode->hash(), emptyHash));
+    tree.calculateHash();
+    // check that the hash of the branch node at b and branchnode hash are the same
+    ASSERT_FALSE(compareHashes(root->hash(), emptyHash));
+    ASSERT_FALSE(compareHashes(bHob->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(bBranchNode->hash(), bHob->hash()));
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

@@ -1,6 +1,6 @@
 # Compiler and Flags
 CXX = g++-11
-CXXFLAGS = -std=c++2a -I/usr/local/include -Wall -g -MMD -MP
+CXXFLAGS = -std=c++23 -I/usr/local/include -Wall -g -MMD -MP
 LDFLAGS = -L/usr/local/lib -L/usr/lib/x86_64-linux-gnu -lgtest -lgtest_main -pthread -lcrypto
 
 # Directories

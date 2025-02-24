@@ -25,6 +25,13 @@ class Tree {
     const std::unique_ptr<BranchNode>& getRootNode() const { return root_; }
 
     void calculateHash();
+    size_t dbSize() const { return db_.size(); }
+    const std::map<ByteSequence, std::unique_ptr<BranchNode>, CompareBytes>& getRoDB() const {
+        return db_;
+    }
+
+    // counters
+    size_t numDirtynodes_ = 0;
 
    private:
     template <typename SPAN>

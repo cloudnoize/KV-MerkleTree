@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "../tree.hpp"
 
 using namespace merkle;
@@ -454,6 +456,97 @@ TEST(Tree, hash_of_branch_hashes) {
     ASSERT_FALSE(compareHashes(root->hash(), emptyHash));
     ASSERT_FALSE(compareHashes(bHob->hash(), emptyHash));
     ASSERT_TRUE(compareHashes(bBranchNode->hash(), bHob->hash()));
+}
+
+TEST(Tree, calculate_hash_last_node) {
+    Tree tree;
+    unsigned char emptyHash[SHA256_DIGEST_LENGTH] = {};
+    {
+        ByteSequence key{255};
+        ByteSequence value{'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    // insert new leaf on the path of prev leaf, should create a new branch node
+    {
+        ByteSequence key{255, 255, 255};
+        ByteSequence value{'a', 'a'};
+        tree.insert(std::move(key), std::move(value));
+    }
+    const auto& root = tree.getRootNode();
+    Byte last = 255;
+    auto& lastHob = root->getChildAt(last);
+    ASSERT_EQ(lastHob->getType(), merkle::Node::HashOfBranch);
+    ByteSequence key{last};
+    auto& lastBranchNode = tree.getBranchNode(key);
+    ASSERT_TRUE(compareHashes(root->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(lastHob->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(lastBranchNode->hash(), emptyHash));
+    tree.calculateHash();
+    // check that the hash of the branch node at b and branchnode hash are the same
+    ASSERT_FALSE(compareHashes(root->hash(), emptyHash));
+    ASSERT_FALSE(compareHashes(lastHob->hash(), emptyHash));
+    ASSERT_TRUE(compareHashes(lastBranchNode->hash(), lastHob->hash()));
+    ASSERT_EQ(tree.numDirtynodes_, 1);
+}
+
+ByteSequence getKeyWithSamePrefix(size_t size) {
+    std::vector<uint8_t> key;
+    key.reserve(size);  // Reserve space for 255 elements
+
+    std::mt19937 gen(42);                             // Always produces the same sequence
+                                                      // Mersenne Twister PRNG
+    std::uniform_int_distribution<int> dist(0, 255);  // Uniform distribution in range [0, 255]
+
+    for (size_t i = 0; i < size; ++i) {
+        key.push_back(static_cast<uint8_t>(dist(gen)));  // Cast to uint8_t and push to vector
+    }
+    return key;
+}
+
+ByteSequence getRandomValue() {
+    ByteSequence value;
+    value.reserve(5);  // Reserve space for 255 elements
+
+    std::random_device rd;                            // Non-deterministic random number generator
+    std::mt19937 gen(rd());                           // Mersenne Twister PRNG
+    std::uniform_int_distribution<int> dist(0, 255);  // Uniform distribution in range [0, 255]
+
+    for (int i = 0; i < 5; ++i) {
+        value.push_back(static_cast<uint8_t>(dist(gen)));  // Cast to uint8_t and push to vector
+    }
+    return value;
+}
+
+TEST(Tree, calculate_hash_many_nodes) {
+    Tree tree;
+    std::mt19937 gen(60);                             // Always produces the same sequence
+                                                      // Mersenne Twister PRNG
+    std::uniform_int_distribution<int> dist(0, 255);  // Uniform distribution in range [0, 255]
+    for (int i = 0; i < 10; ++i) {
+        auto key = getKeyWithSamePrefix(dist(gen));
+        auto value = getRandomValue();
+        tree.insert(std::move(key), std::move(value));
+    }
+    tree.calculateHash();
+    ASSERT_EQ(tree.numDirtynodes_, tree.dbSize());
+    // iterate over db_ backward, for each key, take the last byte
+    // it should be the hashOfBranch Byte in the preceding node. validate that the hob hash matches
+    // the current node hash.
+    Node* prvNode = nullptr;
+    Node* hob = nullptr;
+    Byte b = 0;
+    for (auto it = tree.getRoDB().crbegin(); it != tree.getRoDB().crend(); ++it) {
+        if (it == tree.getRoDB().crbegin()) {
+            b = it->first.back();
+            prvNode = it->second.get();
+            continue;
+        }
+        hob = it->second->getChildAt(b).get();
+        ASSERT_EQ(hob->getType(), merkle::Node::HashOfBranch);
+        ASSERT_TRUE(compareHashes(prvNode->hash(), hob->hash()));
+        b = it->first.back();
+        prvNode = it->second.get();
+    }
 }
 
 int main(int argc, char** argv) {

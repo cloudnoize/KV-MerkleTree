@@ -124,15 +124,18 @@ void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
         }
     }
 }
+
 // Calculate the root hash by traversing only dirty paths.
 void Tree::calculateHash() {
+    numDirtynodes_ = 0;
     auto* node = root_.get();
     ByteSequence key;
     std::stack<std::pair<BranchNode*, Byte>> nodes;
     while (true) {
         // Do depth search by looping over the current node children, if a dirty branch node is
         // found load its corresponding branch and recurse on it.
-        for (int i = 0; i < std::numeric_limits<Byte>::max(); ++i) {
+        int i = 0;
+        for (; i <= std::numeric_limits<Byte>::max(); ++i) {
             auto byte = static_cast<Byte>(i);
             auto& child = node->getChildAt(byte);
             if (child == nullptr) {
@@ -140,13 +143,20 @@ void Tree::calculateHash() {
             }
             if (child->getType() == Node::Type::HashOfBranch &&
                 static_cast<HashOfBranch*>(child.get())->isDirty()) {
-                // set dirty false here?
+                // TODO set dirty false here?
+                ++numDirtynodes_;
                 key.insert(key.end(), node->extension().begin(), node->extension().end());
                 key.push_back(byte);
                 nodes.push(std::make_pair(node, byte));
                 node = getBranchNode(key).get();
-                continue;
+                assert(node != nullptr);
+                break;
+                ;
             }
+        }
+        // check if we terminated the iteration over the node or went down a level
+        if (i <= std::numeric_limits<Byte>::max()) {
+            continue;
         }
         // When we reach here it means that the current node has not more dirty children and is
         // ready for its hash computation
@@ -170,4 +180,6 @@ void Tree::calculateHash() {
         // can optimize here to set i for the next byte i.e. i = topNodePair.second+1;
     }
 };
+
+// void Tree::printTree()
 }  // namespace merkle

@@ -15,11 +15,25 @@ using Byte = uint8_t;
 using ByteSequence = std::vector<Byte>;
 using ByteSequenceView = std::span<const Byte>;
 
+inline std::ostream& operator<<(std::ostream& os, const ByteSequence& bs) {
+    for (const auto& b : bs) {
+        os << (int)b << "|";
+    }
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const ByteSequenceView& bs) {
+    for (const auto& b : bs) {
+        os << (int)b << "|";
+    }
+    return os;
+}
+
 inline ByteSequenceView ByteSequenceToView(const ByteSequence& bs) {
     return ByteSequenceView{bs.begin(), bs.end()};
 }
 
-struct CompareBytes {
+struct LessThan {
     using is_transparent = void;  // Enables heterogeneous lookup
     template <typename T, typename U>
     bool operator()(const T& lhs, const U& rhs) const {
@@ -29,6 +43,19 @@ struct CompareBytes {
             }
         }
         return lhs.size() < rhs.size();
+    }
+};
+
+struct CompareBytes {
+    using is_transparent = void;  // Enables heterogeneous lookup
+    template <typename T, typename U>
+    bool operator()(const T& lhs, const U& rhs) const {
+        for (size_t i = 0; i < lhs.size() && i < rhs.size(); ++i) {
+            if (lhs[i] != rhs[i]) {
+                return false;
+            }
+        }
+        return lhs.size() == rhs.size();
     }
 };
 

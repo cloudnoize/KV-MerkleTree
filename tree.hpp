@@ -5,6 +5,11 @@
 namespace merkle {
 class Tree {
    public:
+    using KVDB = std::map<ByteSequence, std::unique_ptr<BranchNode>, LessThan>;
+    struct Proof {
+        BranchNode root;
+        KVDB db;
+    };
     Tree() {
         BranchNode::setNullNodeHash();
         root_ = BranchNode::createBranchNode();
@@ -26,9 +31,13 @@ class Tree {
 
     void calculateHash();
     size_t dbSize() const { return db_.size(); }
-    const std::map<ByteSequence, std::unique_ptr<BranchNode>, CompareBytes>& getRoDB() const {
+    const std::map<ByteSequence, std::unique_ptr<BranchNode>, LessThan>& getRoDB() const {
         return db_;
     }
+
+    void printTree();
+
+    // KVDB generateProof(const ByteSequenceView key) const;
 
     // counters
     size_t numDirtynodes_ = 0;
@@ -42,6 +51,6 @@ class Tree {
     }
 
     std::unique_ptr<BranchNode> root_;
-    std::map<ByteSequence, std::unique_ptr<BranchNode>, CompareBytes> db_;
+    KVDB db_;
 };
 };  // namespace merkle

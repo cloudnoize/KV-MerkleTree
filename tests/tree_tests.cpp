@@ -456,6 +456,7 @@ TEST(Tree, hash_of_branch_hashes) {
     ASSERT_FALSE(compareHashes(root->hash(), emptyHash));
     ASSERT_FALSE(compareHashes(bHob->hash(), emptyHash));
     ASSERT_TRUE(compareHashes(bBranchNode->hash(), bHob->hash()));
+    tree.printTree();
 }
 
 TEST(Tree, calculate_hash_last_node) {
@@ -527,7 +528,9 @@ TEST(Tree, calculate_hash_many_nodes) {
         auto value = getRandomValue();
         tree.insert(std::move(key), std::move(value));
     }
+    tree.printTree();
     tree.calculateHash();
+    tree.printTree();
     ASSERT_EQ(tree.numDirtynodes_, tree.dbSize());
     // iterate over db_ backward, for each key, take the last byte
     // it should be the hashOfBranch Byte in the preceding node. validate that the hob hash matches

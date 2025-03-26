@@ -1,6 +1,8 @@
 #include "tree.hpp"
 
+#include <queue>
 #include <stack>
+#include <tuple>
 
 namespace merkle {
 void Tree::insert(ByteSequence&& key, ByteSequence&& value) {
@@ -181,5 +183,34 @@ void Tree::calculateHash() {
     }
 };
 
-// void Tree::printTree()
+void Tree::printTree() {
+    using NodeInfo = std::tuple<size_t, ByteSequence, BranchNode*>;
+    std::queue<NodeInfo> dfs;
+    size_t level = 0;
+    dfs.push(std::make_tuple(level, ByteSequence{}, root_.get()));
+    while (dfs.size() > 0) {
+        const auto& ni = dfs.front();
+        level = std::get<0>(ni);
+        ByteSequence key = std::get<1>(ni);
+        BranchNode* node = std::get<2>(ni);
+        std::cout << "Level: " << level << "\n";
+        std::cout << "Key: " << key << "\n";
+        node->print(std::cout);
+
+        const auto& ev = node->extension();
+        for (Byte b : ev) {
+            key.push_back(b);
+        }
+        for (int i = 0; i < std::numeric_limits<Byte>::max(); ++i) {
+            Byte b = static_cast<Byte>(i);
+            if (node->getTypeOfChild(b) == Node::HashOfBranch) {
+                key.push_back(b);
+                dfs.push(std::make_tuple(level + 1, key, db_[key].get()));
+                key.pop_back();
+            }
+        }
+        dfs.pop();
+    }
+}
+
 }  // namespace merkle

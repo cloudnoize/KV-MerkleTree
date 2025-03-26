@@ -215,7 +215,7 @@ TEST(ByteSequence, less_than) {
         ByteSequence key{'a', 'b', 'd', 'f', 'd', 'm'};
         ByteSequence key2{'a', 'b', 'd', 'f', 'd'};
         auto key2View = ByteSequenceToView(key2);
-        auto res = CompareBytes{}(key2View, key);
+        auto res = LessThan{}(key2View, key);
         ASSERT_TRUE(res);
     }
 
@@ -223,7 +223,7 @@ TEST(ByteSequence, less_than) {
         ByteSequence key{'a', 'b', 'd', 'f', 'd', 'm'};
         ByteSequence key2{'a', 'b', 'd', 'f', 'd', 'z'};
         auto key2View = ByteSequenceToView(key2);
-        auto res = CompareBytes{}(key2View, key);
+        auto res = LessThan{}(key2View, key);
         ASSERT_FALSE(res);
     }
 
@@ -231,7 +231,7 @@ TEST(ByteSequence, less_than) {
         ByteSequence key{'a', 'b', 'd', 'f', 'd'};
         ByteSequence key2{'a', 'b', 'd', 'f', 'd'};
         auto key2View = ByteSequenceToView(key2);
-        auto res = CompareBytes{}(key2View, key);
+        auto res = LessThan{}(key2View, key);
         ASSERT_FALSE(res);
     }
 }
